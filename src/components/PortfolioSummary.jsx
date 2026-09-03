@@ -160,8 +160,8 @@ export const PortfolioSummary = ({ metrics }) => {
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px] sm:text-[11px] text-slate-400">
-          <span>Giao dịch đã bán:</span>
-          <span className="font-semibold text-slate-200 font-numeric">{realizedTrades.length} lượt</span>
+          <span>Giao dịch đã chốt:</span>
+          <span className="font-semibold text-slate-200 font-numeric">{totalTradesCount || 0} lượt</span>
         </div>
       </div>
 
