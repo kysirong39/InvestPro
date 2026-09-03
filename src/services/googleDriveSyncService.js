@@ -9,7 +9,10 @@ const GOOGLE_DRIVE_FILENAME = 'investpro_portfolio_master.json';
  * Tìm file danh mục trong Google Drive của người dùng (Hỗ trợ AppDataFolder và Root Drive)
  */
 export const findGoogleDriveFile = async (accessToken) => {
-  if (!accessToken) return { file: null, error: 'Chưa có Access Token Google' };
+  if (!accessToken) {
+    return { file: null, error: 'Chưa có quyền truy cập Google (Access Token). Vui lòng đăng nhập lại.', needReauth: true };
+  }
+  
   try {
     const query = encodeURIComponent(`name = '${GOOGLE_DRIVE_FILENAME}' and trashed = false`);
     
@@ -25,7 +28,7 @@ export const findGoogleDriveFile = async (accessToken) => {
           return { file: data.files[0], space: 'appDataFolder', error: null };
         }
       } else if (appDataRes.status === 401) {
-        return { file: null, error: 'Phiên Google đã hết hạn', needReauth: true };
+        return { file: null, error: 'Phiên đăng nhập Google đã hết hạn. Vui lòng bấm Đăng Nhập để làm mới.', needReauth: true };
       }
     } catch (e) {
       console.warn('Lỗi tìm trong appDataFolder:', e);
@@ -48,7 +51,7 @@ export const findGoogleDriveFile = async (accessToken) => {
       const needEnable = msg.includes('disabled') || msg.includes('not been used');
       return { 
         file: null, 
-        error: is401 ? 'Phiên Google đã hết hạn. Vui lòng bấm Đăng Nhập để làm mới.' : msg,
+        error: is401 ? 'Phiên đăng nhập Google đã hết hạn. Vui lòng bấm Đăng Nhập để làm mới.' : msg || `Lỗi Google API (HTTP ${driveRes.status})`,
         needReauth: is401,
         needEnableApi: needEnable
       };
@@ -56,7 +59,7 @@ export const findGoogleDriveFile = async (accessToken) => {
 
     return { file: null, error: null }; // Chưa có file
   } catch (err) {
-    return { file: null, error: err.message };
+    return { file: null, error: err.message || 'Lỗi mạng khi kết nối Google Drive' };
   }
 };
 
@@ -64,7 +67,9 @@ export const findGoogleDriveFile = async (accessToken) => {
  * Tải dữ liệu danh mục từ Google Drive
  */
 export const loadPortfolioFromGoogleDrive = async (accessToken) => {
-  if (!accessToken) return { data: null, error: 'Chưa có Access Token' };
+  if (!accessToken) {
+    return { data: null, error: 'Chưa có Access Token Google', needReauth: true };
+  }
   try {
     const { file, error, needEnableApi, needReauth } = await findGoogleDriveFile(accessToken);
     if (error) {
@@ -72,7 +77,7 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
     }
 
     if (!file || !file.id) {
-      return { data: null, error: 'Chưa có file danh mục trên Google Drive', isNewUser: true };
+      return { data: null, error: 'Chưa tìm thấy file danh mục trên Google Drive của tài khoản này.', isNewUser: true };
     }
 
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
@@ -85,6 +90,7 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
         data: portfolioData, 
         error: null, 
         fileId: file.id,
+        holdingsCount: Array.isArray(portfolioData?.holdings) ? portfolioData.holdings.length : 0,
         modifiedTime: file.modifiedTime 
       };
     } else {
@@ -92,7 +98,7 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
       return { data: null, error: errData?.error?.message || `Lỗi tải file (HTTP ${res.status})` };
     }
   } catch (err) {
-    return { data: null, error: err.message };
+    return { data: null, error: err.message || 'Lỗi mạng khi tải từ Google Drive' };
   }
 };
 
@@ -101,7 +107,9 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
  * Sử dụng quy trình 2 bước chuẩn quốc tế: Tạo file Metadata -> Đẩy nội dung JSON
  */
 export const savePortfolioToGoogleDrive = async (portfolioData, accessToken) => {
-  if (!accessToken) return { success: false, error: 'Chưa có Access Token' };
+  if (!accessToken) {
+    return { success: false, error: 'Chưa có Access Token Google', needReauth: true };
+  }
   try {
     const { file, error, needEnableApi, needReauth } = await findGoogleDriveFile(accessToken);
     if (needEnableApi || needReauth) {
@@ -176,12 +184,18 @@ export const savePortfolioToGoogleDrive = async (portfolioData, accessToken) => 
     });
 
     if (uploadRes.ok) {
-      return { success: true, error: null, fileId: targetFileId };
+      return { 
+        success: true, 
+        error: null, 
+        fileId: targetFileId,
+        holdingsCount: cleanHoldings.length,
+        savedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      };
     } else {
       const errData = await uploadRes.json().catch(() => ({}));
       return { success: false, error: errData?.error?.message || `Lỗi ghi nội dung (HTTP ${uploadRes.status})` };
     }
   } catch (err) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'Lỗi kết nối khi lưu lên Google Drive' };
   }
 };
