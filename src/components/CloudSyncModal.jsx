@@ -35,17 +35,17 @@ export const CloudSyncModal = ({
   // Status: { type: 'idle' | 'loading' | 'success' | 'error' | 'warning', message: '', time: '' }
   const [status, setStatus] = useState({ type: 'idle', message: '', time: '' });
   const [needEnableApi, setNeedEnableApi] = useState(false);
-  const [needReauth, setNeedReauth] = useState(false);
+  const [needDriveConsent, setNeedDriveConsent] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
 
-  // Đăng nhập trực tiếp bằng Google GIS ngay tại modal này
-  const handleDirectGoogleLogin = () => {
+  // Cấp quyền Google Drive theo yêu cầu (Incremental Drive Scope Request)
+  const requestDriveScope = (onSuccess) => {
     if (!window.google?.accounts?.oauth2) {
       setStatus({
         type: 'warning',
-        message: 'Đang tải thư viện xác thực Google, vui lòng thử lại sau 1-2 giây...',
+        message: 'Đang tải thư viện Google, vui lòng thử lại sau 1-2 giây...',
         time: new Date().toLocaleTimeString('vi-VN')
       });
       return;
@@ -53,7 +53,48 @@ export const CloudSyncModal = ({
 
     setStatus({
       type: 'loading',
-      message: 'Đang mở cửa sổ xác thực Google...',
+      message: 'Đang mở cửa sổ xin quyền lưu trữ Google Drive...',
+      time: new Date().toLocaleTimeString('vi-VN')
+    });
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid https://www.googleapis.com/auth/drive.file',
+        callback: async (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            const updatedUser = {
+              ...currentUser,
+              accessToken: tokenResponse.access_token
+            };
+            if (onUserChanged) onUserChanged(updatedUser);
+            setNeedDriveConsent(false);
+            if (onSuccess) {
+              onSuccess(tokenResponse.access_token);
+            }
+          } else if (tokenResponse?.error) {
+            setStatus({
+              type: 'error',
+              message: 'Lỗi cấp quyền Google: ' + tokenResponse.error,
+              time: new Date().toLocaleTimeString('vi-VN')
+            });
+          }
+        }
+      });
+
+      client.requestAccessToken({ prompt: 'consent' });
+    } catch (err) {
+      console.error('Lỗi mở popup Google Drive:', err);
+    }
+  };
+
+  // Đăng nhập tài khoản Google cơ bản
+  const handleDirectGoogleLogin = () => {
+    if (!window.google?.accounts?.oauth2) return;
+
+    setStatus({
+      type: 'loading',
+      message: 'Đang mở cửa sổ đăng nhập Google...',
       time: new Date().toLocaleTimeString('vi-VN')
     });
 
@@ -65,9 +106,7 @@ export const CloudSyncModal = ({
           if (tokenResponse && tokenResponse.access_token) {
             try {
               const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: {
-                  Authorization: `Bearer ${tokenResponse.access_token}`
-                }
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
               });
 
               if (res.ok) {
@@ -79,29 +118,15 @@ export const CloudSyncModal = ({
                   accessToken: tokenResponse.access_token
                 });
 
-                if (onUserChanged) {
-                  onUserChanged(user);
-                }
-                setNeedReauth(false);
+                if (onUserChanged) onUserChanged(user);
                 setStatus({
                   type: 'success',
-                  message: `✓ Đăng nhập Google thành công (${profile.email})! Quyền truy cập đã được làm mới.`,
-                  time: new Date().toLocaleTimeString('vi-VN')
-                });
-              } else {
-                setStatus({
-                  type: 'error',
-                  message: 'Không lấy được thông tin từ Google API.',
+                  message: `✓ Đã đăng nhập tài khoản: ${profile.email}!`,
                   time: new Date().toLocaleTimeString('vi-VN')
                 });
               }
             } catch (fetchErr) {
               console.error('Lỗi fetch Google userinfo:', fetchErr);
-              setStatus({
-                type: 'error',
-                message: 'Lỗi kết nối máy chủ Google: ' + fetchErr.message,
-                time: new Date().toLocaleTimeString('vi-VN')
-              });
             }
           }
         }
@@ -109,63 +134,58 @@ export const CloudSyncModal = ({
 
       client.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      console.error('Lỗi mở popup Google:', err);
-      setStatus({
-        type: 'error',
-        message: 'Không thể mở cửa sổ Google. Hãy kiểm tra trình duyệt có chặn popup không.',
-        time: new Date().toLocaleTimeString('vi-VN')
-      });
+      console.error('Lỗi đăng nhập Google:', err);
     }
   };
 
-  // 1. Tải danh mục từ Google Drive về máy này
-  const handlePullFromDrive = async () => {
+  // 1. Tải danh mục từ Google Drive
+  const handlePullFromDrive = async (tokenOverride) => {
+    const token = tokenOverride || currentUser?.accessToken;
+
     if (currentUser?.isGuest || !currentUser?.email) {
       setStatus({
         type: 'warning',
-        message: 'Bạn đang ở tài khoản Khách. Vui lòng bấm [Đăng Nhập Google] ở trên để tải danh mục.',
+        message: 'Vui lòng bấm [Đăng Nhập Google] ở trên để tải danh mục.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
-      setNeedReauth(true);
-      return;
-    }
-
-    if (!currentUser?.accessToken) {
-      // Tự động mở đăng nhập Google để lấy Access Token
-      handleDirectGoogleLogin();
       return;
     }
 
     setPulling(true);
     setNeedEnableApi(false);
-    setNeedReauth(false);
+    setNeedDriveConsent(false);
     setStatus({
       type: 'loading',
-      message: 'Đang kết nối Google Drive để tìm kiếm danh mục mới nhất...',
+      message: 'Đang tìm kiếm file danh mục trên Google Drive của bạn...',
       time: new Date().toLocaleTimeString('vi-VN')
     });
 
     try {
-      const result = await loadPortfolioFromGoogleDrive(currentUser.accessToken);
+      const result = await loadPortfolioFromGoogleDrive(token);
       
       if (result.data && Array.isArray(result.data.holdings)) {
         onApplyPortfolioData(result.data);
         setStatus({
           type: 'success',
-          message: `✓ Đã tải và đồng bộ thành công ${result.data.holdings.length} mã cổ phiếu từ Google Drive về máy này!`,
+          message: `✓ Đã tải và đồng bộ thành công ${result.data.holdings.length} mã cổ phiếu từ Google Drive!`,
           time: new Date().toLocaleTimeString('vi-VN')
         });
       } else {
-        if (result.needEnableApi) {
-          setNeedEnableApi(true);
-        }
-        if (result.needReauth) {
-          handleDirectGoogleLogin();
+        if (result.error && (result.error.includes('scope') || result.error.includes('insufficient') || result.needReauth)) {
+          setNeedDriveConsent(true);
+          setStatus({
+            type: 'warning',
+            message: 'Cần cấp quyền truy cập Google Drive. Bấm nút [Cấp Quyền Google Drive] bên dưới.',
+            time: new Date().toLocaleTimeString('vi-VN')
+          });
           return;
         }
+
+        if (result.needEnableApi) setNeedEnableApi(true);
+
         setStatus({
           type: result.needEnableApi ? 'warning' : 'error',
-          message: result.error || 'Chưa tìm thấy file danh mục trên Google Drive của tài khoản này.',
+          message: result.error || 'Chưa tìm thấy file danh mục trên Google Drive.',
           time: new Date().toLocaleTimeString('vi-VN')
         });
       }
@@ -180,50 +200,50 @@ export const CloudSyncModal = ({
     }
   };
 
-  // 2. Đẩy danh mục từ máy này lên Google Drive
-  const handlePushToDrive = async () => {
+  // 2. Đẩy danh mục lên Google Drive
+  const handlePushToDrive = async (tokenOverride) => {
+    const token = tokenOverride || currentUser?.accessToken;
+
     if (currentUser?.isGuest || !currentUser?.email) {
       setStatus({
         type: 'warning',
-        message: 'Bạn đang ở tài khoản Khách. Vui lòng bấm [Đăng Nhập Google] ở trên để lưu danh mục.',
+        message: 'Vui lòng bấm [Đăng Nhập Google] ở trên để lưu danh mục.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
-      setNeedReauth(true);
-      return;
-    }
-
-    if (!currentUser?.accessToken) {
-      // Tự động mở đăng nhập Google để lấy Access Token
-      handleDirectGoogleLogin();
       return;
     }
 
     setPushing(true);
     setNeedEnableApi(false);
-    setNeedReauth(false);
+    setNeedDriveConsent(false);
     setStatus({
       type: 'loading',
-      message: 'Đang tải toàn bộ dữ liệu danh mục lên Google Drive của bạn...',
+      message: 'Đang tải toàn bộ dữ liệu danh mục lên Google Drive...',
       time: new Date().toLocaleTimeString('vi-VN')
     });
 
     try {
-      const result = await savePortfolioToGoogleDrive(data, currentUser.accessToken);
+      const result = await savePortfolioToGoogleDrive(data, token);
       
       if (result.success) {
         setStatus({
           type: 'success',
-          message: `✓ Đã lưu thành công ${result.holdingsCount || data.holdings.length} mã cổ phiếu lên Google Drive lúc ${result.savedAt || new Date().toLocaleTimeString('vi-VN')}! Dữ liệu đã sẵn sàng để mở trên máy tính khác hoặc điện thoại.`,
+          message: `✓ Đã lưu thành công ${result.holdingsCount || data.holdings.length} mã cổ phiếu lên Google Drive lúc ${result.savedAt || new Date().toLocaleTimeString('vi-VN')}!`,
           time: result.savedAt || new Date().toLocaleTimeString('vi-VN')
         });
       } else {
-        if (result.needEnableApi) {
-          setNeedEnableApi(true);
-        }
-        if (result.needReauth) {
-          handleDirectGoogleLogin();
+        if (result.error && (result.error.includes('scope') || result.error.includes('insufficient') || result.needReauth)) {
+          setNeedDriveConsent(true);
+          setStatus({
+            type: 'warning',
+            message: 'Cần cấp quyền ghi file vào Google Drive. Bấm nút [Cấp Quyền Google Drive] bên dưới.',
+            time: new Date().toLocaleTimeString('vi-VN')
+          });
           return;
         }
+
+        if (result.needEnableApi) setNeedEnableApi(true);
+
         setStatus({
           type: result.needEnableApi ? 'warning' : 'error',
           message: result.error || 'Không thể lưu lên Google Drive.',
@@ -241,7 +261,7 @@ export const CloudSyncModal = ({
     }
   };
 
-  // 3. Tạo Magic Sync Link (Link chuyển nhanh sang điện thoại / máy khác)
+  // 3. Tạo Magic Sync Link
   const handleCopyMagicLink = () => {
     try {
       const payload = {
@@ -353,17 +373,23 @@ export const CloudSyncModal = ({
           </div>
         )}
 
-        {/* Re-authenticate Action Button ONLY if user is guest */}
-        {needReauth && currentUser?.isGuest && (
-          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 flex items-center justify-between gap-3">
-            <span className="text-amber-200 text-[11px] font-medium">Bạn chưa đăng nhập:</span>
+        {/* Grant Drive Permission Box */}
+        {needDriveConsent && (
+          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 space-y-3">
+            <div className="flex items-center gap-2 font-bold text-amber-400">
+              <KeyRound className="w-4 h-4 shrink-0" />
+              <span>Cấp Quyền Lưu File Vào Google Drive</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Google yêu cầu xác nhận cho phép ứng dụng tạo tệp lưu trữ danh mục trên Google Drive của bạn.
+            </p>
             <button
               type="button"
-              onClick={handleDirectGoogleLogin}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
+              onClick={() => requestDriveScope((newToken) => handlePushToDrive(newToken))}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-2"
             >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Đăng Nhập Ngay</span>
+              <KeyRound className="w-4 h-4" />
+              <span>Bấm Vào Đây Để Cấp Quyền Google Drive</span>
             </button>
           </div>
         )}
@@ -410,7 +436,7 @@ export const CloudSyncModal = ({
               <button
                 type="button"
                 disabled={pulling || pushing}
-                onClick={handlePullFromDrive}
+                onClick={() => handlePullFromDrive()}
                 className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-indigo-500 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 group shadow-sm cursor-pointer"
               >
                 <DownloadCloud className={`w-4 h-4 text-indigo-400 group-hover:-translate-y-0.5 transition-transform ${pulling ? 'animate-bounce' : ''}`} />
@@ -421,7 +447,7 @@ export const CloudSyncModal = ({
               <button
                 type="button"
                 disabled={pulling || pushing}
-                onClick={handlePushToDrive}
+                onClick={() => handlePushToDrive()}
                 className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 active:scale-95 group cursor-pointer"
               >
                 <UploadCloud className={`w-4 h-4 group-hover:-translate-y-0.5 transition-transform ${pushing ? 'animate-bounce' : ''}`} />
@@ -430,7 +456,7 @@ export const CloudSyncModal = ({
             </div>
           </div>
 
-          {/* 2. Magic Sync Link (Instant Share to Phone/PC) */}
+          {/* 2. Magic Sync Link */}
           <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
             <div className="text-xs font-extrabold text-white flex items-center justify-between">
               <span className="flex items-center gap-1.5">
