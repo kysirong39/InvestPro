@@ -60,7 +60,7 @@ export const CloudSyncModal = ({
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'email profile openid https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata',
+        scope: 'email profile openid https://www.googleapis.com/auth/drive.file',
         callback: async (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             try {
@@ -120,13 +120,19 @@ export const CloudSyncModal = ({
 
   // 1. Tải danh mục từ Google Drive về máy này
   const handlePullFromDrive = async () => {
-    if (!currentUser?.accessToken || currentUser?.isGuest) {
+    if (currentUser?.isGuest || !currentUser?.email) {
       setStatus({
         type: 'warning',
-        message: 'Bạn chưa đăng nhập Google hoặc phiên đã hết hạn. Vui lòng bấm nút [Đăng Nhập Lại] màu vàng bên dưới.',
+        message: 'Bạn đang ở tài khoản Khách. Vui lòng bấm [Đăng Nhập Google] ở trên để tải danh mục.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
       setNeedReauth(true);
+      return;
+    }
+
+    if (!currentUser?.accessToken) {
+      // Tự động mở đăng nhập Google để lấy Access Token
+      handleDirectGoogleLogin();
       return;
     }
 
@@ -154,7 +160,8 @@ export const CloudSyncModal = ({
           setNeedEnableApi(true);
         }
         if (result.needReauth) {
-          setNeedReauth(true);
+          handleDirectGoogleLogin();
+          return;
         }
         setStatus({
           type: result.needEnableApi ? 'warning' : 'error',
@@ -175,13 +182,19 @@ export const CloudSyncModal = ({
 
   // 2. Đẩy danh mục từ máy này lên Google Drive
   const handlePushToDrive = async () => {
-    if (!currentUser?.accessToken || currentUser?.isGuest) {
+    if (currentUser?.isGuest || !currentUser?.email) {
       setStatus({
         type: 'warning',
-        message: 'Bạn chưa đăng nhập Google hoặc phiên đã hết hạn. Vui lòng bấm nút [Đăng Nhập Lại] màu vàng bên dưới.',
+        message: 'Bạn đang ở tài khoản Khách. Vui lòng bấm [Đăng Nhập Google] ở trên để lưu danh mục.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
       setNeedReauth(true);
+      return;
+    }
+
+    if (!currentUser?.accessToken) {
+      // Tự động mở đăng nhập Google để lấy Access Token
+      handleDirectGoogleLogin();
       return;
     }
 
@@ -208,7 +221,8 @@ export const CloudSyncModal = ({
           setNeedEnableApi(true);
         }
         if (result.needReauth) {
-          setNeedReauth(true);
+          handleDirectGoogleLogin();
+          return;
         }
         setStatus({
           type: result.needEnableApi ? 'warning' : 'error',
@@ -297,7 +311,7 @@ export const CloudSyncModal = ({
             </div>
           </div>
 
-          {currentUser?.isGuest || !currentUser?.accessToken ? (
+          {currentUser?.isGuest ? (
             <button
               type="button"
               onClick={handleDirectGoogleLogin}
@@ -309,7 +323,7 @@ export const CloudSyncModal = ({
           ) : (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold shrink-0">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Đã Kết Nối API</span>
+              <span>Đã Đăng Nhập</span>
             </div>
           )}
         </div>
@@ -339,17 +353,17 @@ export const CloudSyncModal = ({
           </div>
         )}
 
-        {/* Re-authenticate Action Button if needed */}
-        {needReauth && (
+        {/* Re-authenticate Action Button ONLY if user is guest */}
+        {needReauth && currentUser?.isGuest && (
           <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 flex items-center justify-between gap-3">
-            <span className="text-amber-200 text-[11px] font-medium">Phiên đăng nhập đã hết hạn:</span>
+            <span className="text-amber-200 text-[11px] font-medium">Bạn chưa đăng nhập:</span>
             <button
               type="button"
               onClick={handleDirectGoogleLogin}
               className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
             >
               <KeyRound className="w-3.5 h-3.5" />
-              <span>Đăng Nhập Lại Ngay</span>
+              <span>Đăng Nhập Ngay</span>
             </button>
           </div>
         )}
