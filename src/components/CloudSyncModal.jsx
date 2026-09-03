@@ -405,45 +405,52 @@ export const CloudSyncModal = ({
         )}
 
         {/* Google 403 Access Blocked Specific Guide */}
-        {google403Error && (
-          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/50 text-xs mb-5 space-y-2.5">
-            <div className="flex items-center gap-2 font-bold text-rose-400">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Google Chặn Quyền Drive (Lỗi 403 Access Blocked)</span>
+        {(google403Error || needDriveConsent) && (
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/60 text-xs mb-5 space-y-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 font-bold text-rose-400 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>Cách Xử Lý Lỗi 403 (Access Blocked) Của Google</span>
             </div>
+            
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Google yêu cầu bạn thêm email <strong className="text-white">kysirong39@gmail.com</strong> vào danh sách <strong>Test users</strong> trên Google Cloud Console (hoặc sử dụng tính năng <strong>Link Mở Nhanh</strong> bên dưới không bị chặn).
+              Google Drive yêu cầu thêm tài khoản Gmail <strong className="text-white bg-slate-800 px-1.5 py-0.5 rounded font-numeric">{currentUser?.email || 'kysirong39@gmail.com'}</strong> vào danh sách <strong>Test users</strong> trên Google Cloud Console (chỉ mất 30 giây làm 1 lần duy nhất):
             </p>
-            <a
-              href="https://console.cloud.google.com/apis/credentials/consent?project=348083573261"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500 text-white font-black text-xs hover:bg-rose-400 transition-all shadow-md"
-            >
-              <span>Thêm Test User trên Google Console (30s)</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
-        )}
 
-        {/* Grant Drive Permission Box */}
-        {needDriveConsent && !google403Error && (
-          <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 space-y-3">
-            <div className="flex items-center gap-2 font-bold text-amber-400">
-              <KeyRound className="w-4 h-4 shrink-0" />
-              <span>Yêu Cầu Cấp Quyền Google Drive</span>
+            <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800 space-y-2 text-[11px] text-slate-300">
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-rose-500/20 text-rose-300 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                <span>Bấm nút <strong>Mở Cấu Hình Google Console</strong> bên dưới.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-rose-500/20 text-rose-300 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                <span>Cuộn xuống mục <strong>Test users</strong> (Người dùng thử nghiệm) &rarr; Bấm <strong>+ ADD USERS</strong>.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-rose-500/20 text-rose-300 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                <span>Nhập email <strong className="text-emerald-400 font-numeric">{currentUser?.email || 'kysirong39@gmail.com'}</strong> &rarr; Bấm <strong>SAVE</strong>.</span>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Để lưu tệp danh mục trực tiếp vào Google Drive, bạn cần xác nhận cấp quyền 1 lần.
-            </p>
-            <button
-              type="button"
-              onClick={() => requestDriveScope((newToken) => handlePushToDrive(newToken))}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <KeyRound className="w-4 h-4" />
-              <span>Bấm Vào Đây Để Cấp Quyền Google Drive</span>
-            </button>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <a
+                href="https://console.cloud.google.com/apis/credentials/consent?project=348083573261"
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black text-xs transition-all shadow-md active:scale-95"
+              >
+                <span>Mở Google Console Thêm Test User (30s)</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+
+              <button
+                type="button"
+                onClick={() => requestDriveScope((newToken) => handlePushToDrive(newToken))}
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-600 transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Thử Cấp Quyền Lại</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -473,31 +480,31 @@ export const CloudSyncModal = ({
         <div className="space-y-4">
           
           {/* OPTION 1: MAGIC SYNC LINK (RECOMMENDED - 100% RELIABLE) */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-teal-950/30 border border-teal-500/40 space-y-2.5 relative overflow-hidden">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950/40 border border-teal-500/40 space-y-2.5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-extrabold text-teal-300">
                 <Sparkles className="w-4 h-4 text-teal-400" />
-                <span>Link Mở Nhanh Đa Thiết Bị (Khuyên Dùng)</span>
+                <span>Link Mở Nhanh Đa Thiết Bị (Không Lo Lỗi 403)</span>
               </span>
-              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
-                100% Mượt Mà
+              <span className="text-[9px] uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
+                Mở Tức Thì
               </span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Bấm sao chép link và gửi qua Zalo/Tin nhắn để mở trên Điện thoại hoặc Máy tính khác — toàn bộ danh mục sẽ hiển thị ngay lập tức mà <strong>không lo lỗi Google 403</strong>.
+              Bấm sao chép link và dán vào trình duyệt trên Điện thoại hoặc Máy tính khác &mdash; toàn bộ danh mục, tiền mặt và lịch sử sẽ được chuyển sang ngay lập tức.
             </p>
 
             <button
               type="button"
               onClick={handleCopyMagicLink}
-              className={`w-full py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+              className={`w-full py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md active:scale-[0.99] ${
                 copiedLink 
                   ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-emerald-500/25' 
                   : 'bg-teal-600 hover:bg-teal-500 border-teal-400 text-slate-950 font-black shadow-teal-500/20'
               }`}
             >
               {copiedLink ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedLink ? '✓ Đã Sao Chép Link! Mở Trên Máy Khác Ngay' : '🔗 Sao Chép Link Danh Mục'}</span>
+              <span>{copiedLink ? '✓ Đã Sao Chép Link! Hãy Dán Vào Máy Khác' : '🔗 Sao Chép Link Chuyển Sang Thiết Bị Khác'}</span>
             </button>
           </div>
 
@@ -508,7 +515,7 @@ export const CloudSyncModal = ({
                 <Cloud className="w-4 h-4 text-emerald-400" />
                 <span>Đồng Bộ Trực Tiếp Google Drive</span>
               </span>
-              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-numeric">
                 {data.holdings.length} mã CP hiện tại
               </span>
             </div>
