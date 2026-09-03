@@ -14,6 +14,7 @@ import { EditHoldingModal } from './components/EditHoldingModal';
 import { QuickPriceUpdaterModal } from './components/QuickPriceUpdaterModal';
 import { ApiSettingsModal } from './components/ApiSettingsModal';
 import { AuthModal } from './components/AuthModal';
+import { CloudSyncModal } from './components/CloudSyncModal';
 
 import { 
   loadPortfolioData, 
@@ -32,11 +33,44 @@ export const App = () => {
   // Current logged in Gmail / Google User
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [cloudSyncModalOpen, setCloudSyncModalOpen] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState('synced'); // 'synced' | 'syncing' | 'error'
 
   // Load saved state per user
   const [data, setData] = useState(() => loadPortfolioData(currentUser.id));
   const { holdings, cashBalance, realizedTrades } = data;
+
+  // Listen for #sync= Magic Link from other devices
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.startsWith('#sync=')) {
+      try {
+        const encoded = window.location.hash.replace('#sync=', '');
+        const decodedStr = decodeURIComponent(atob(encoded));
+        const parsed = JSON.parse(decodedStr);
+        if (parsed && Array.isArray(parsed.h)) {
+          const restoredHoldings = parsed.h.map(item => ({
+            id: item.i,
+            symbol: item.s,
+            currentPrice: item.p,
+            sector: item.c,
+            exchange: item.e,
+            lots: item.l
+          }));
+          const restoredData = {
+            holdings: restoredHoldings,
+            cashBalance: typeof parsed.c === 'number' ? parsed.c : 0,
+            realizedTrades: Array.isArray(parsed.t) ? parsed.t : []
+          };
+          setData(restoredData);
+          savePortfolioData(restoredData, currentUser.id);
+          window.history.replaceState(null, '', window.location.pathname);
+          alert('✓ Đã đồng bộ danh mục thành công từ link chia sẻ!');
+        }
+      } catch (err) {
+        console.warn('Lỗi đọc hash sync:', err);
+      }
+    }
+  }, []);
 
   const [activeTab, setActiveTab] = useState('portfolio'); // 'portfolio' | 'history' | 'advisor'
 
@@ -425,7 +459,7 @@ export const App = () => {
         cashBalance={cashBalance}
         currentUser={currentUser}
         cloudSyncState={cloudSyncState}
-        onManualCloudSync={handleManualCloudSync}
+        onManualCloudSync={() => setCloudSyncModalOpen(true)}
         onOpenAuthModal={() => setAuthModalOpen(true)}
         onOpenBuyModal={() => handleOpenBuy(null)}
         onOpenCashModal={() => setCashModalOpen(true)}
@@ -591,6 +625,21 @@ export const App = () => {
           onClose={() => setAuthModalOpen(false)}
           currentUser={currentUser}
           onUserChanged={handleUserChanged}
+        />
+      )}
+
+      {/* Cloud Sync & Cross-Device Hub Modal */}
+      {cloudSyncModalOpen && (
+        <CloudSyncModal
+          isOpen={cloudSyncModalOpen}
+          onClose={() => setCloudSyncModalOpen(false)}
+          currentUser={currentUser}
+          data={data}
+          onApplyPortfolioData={(newData) => {
+            setData(newData);
+            savePortfolioData(newData, currentUser.id);
+          }}
+          onOpenAuthModal={() => setAuthModalOpen(true)}
         />
       )}
 
