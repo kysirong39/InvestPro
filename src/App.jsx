@@ -23,6 +23,7 @@ import {
 } from './utils/storage';
 
 import { getCurrentUser } from './services/authService';
+import { fetchPortfolioFromCloud, syncPortfolioToCloud } from './services/cloudSyncService';
 import { aggregatePortfolio } from './utils/finance';
 import { fetchLivePricesFromApi, getApiSettings } from './services/marketPriceService';
 
@@ -64,18 +65,39 @@ export const App = () => {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState('');
 
-  // Handle User Change / Switch Account
-  const handleUserChanged = (newUser) => {
+  // Handle User Change / Switch Account with Cross-Device Cloud Sync
+  const handleUserChanged = async (newUser) => {
     setCurrentUser(newUser);
-    const userData = loadPortfolioData(newUser.id);
+    let userData = loadPortfolioData(newUser.id);
+
+    // Nếu đăng nhập bằng Gmail, thử nạp dữ liệu từ Cloud (từ máy tính hoặc điện thoại trước đó)
+    if (!newUser.isGuest && newUser.email) {
+      try {
+        const cloudData = await fetchPortfolioFromCloud(newUser.email);
+        if (cloudData && Array.isArray(cloudData.holdings) && cloudData.holdings.length > 0) {
+          userData = cloudData;
+          savePortfolioData(cloudData, newUser.id);
+        } else if (userData.holdings.length > 0) {
+          syncPortfolioToCloud(userData, newUser.email);
+        }
+      } catch (err) {
+        console.warn('Lỗi cloud sync:', err);
+      }
+    }
+
     setData(userData);
   };
 
-  // Auto-save whenever holdings, cash, trades or currentUser change
+  // Auto-save & background Cloud Sync whenever holdings, cash, trades or currentUser change
   useEffect(() => {
     if (currentUser?.id) {
       savePortfolioData({ holdings, cashBalance, realizedTrades }, currentUser.id);
       setLastSaved(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+      // Đồng bộ ngầm lên Đám mây để điện thoại hoặc máy khác xem được
+      if (!currentUser.isGuest && currentUser.email) {
+        syncPortfolioToCloud({ holdings, cashBalance, realizedTrades }, currentUser.email);
+      }
     }
   }, [holdings, cashBalance, realizedTrades, currentUser?.id]);
 
