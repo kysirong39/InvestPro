@@ -3,6 +3,8 @@
  * Quản lý phiên đăng nhập và danh sách tài khoản cá nhân trên thiết bị
  */
 
+export const GOOGLE_CLIENT_ID = '348083573261-ek5kv3o03v3fdrvu0f05slis8u81cppu.apps.googleusercontent.com';
+
 const STORAGE_KEY_CURRENT_USER = 'investpro_current_user_v1';
 const STORAGE_KEY_KNOWN_ACCOUNTS = 'investpro_known_accounts_v1';
 

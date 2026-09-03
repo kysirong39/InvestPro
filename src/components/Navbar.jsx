@@ -148,9 +148,17 @@ export const Navbar = ({
                 title={`Đang đăng nhập: ${currentUser.name} (${currentUser.email}) - Bấm để xem hoặc đổi tài khoản`}
                 className="flex items-center gap-1.5 p-1 sm:p-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left shadow-sm shrink-0"
               >
-                <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentUser.avatarMeta?.gradient || 'from-emerald-500 to-teal-500'} flex items-center justify-center text-white text-xs font-black shrink-0 shadow-inner`}>
-                  {currentUser.avatarMeta?.char || 'U'}
-                </div>
+                {currentUser.avatar ? (
+                  <img 
+                    src={currentUser.avatar} 
+                    alt={currentUser.name} 
+                    className="w-7 h-7 rounded-lg object-cover border border-emerald-500/50 shadow-inner shrink-0"
+                  />
+                ) : (
+                  <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentUser.avatarMeta?.gradient || 'from-emerald-500 to-teal-500'} flex items-center justify-center text-white text-xs font-black shrink-0 shadow-inner`}>
+                    {currentUser.avatarMeta?.char || 'U'}
+                  </div>
+                )}
                 <div className="hidden lg:block pr-1">
                   <div className="text-[11px] font-extrabold text-white leading-tight truncate max-w-[100px]">{currentUser.name}</div>
                   <div className="text-[9px] text-emerald-400 font-numeric leading-tight truncate max-w-[100px]">{currentUser.email}</div>
@@ -160,11 +168,11 @@ export const Navbar = ({
             ) : (
               <button
                 onClick={onOpenAuthModal}
-                title="Đăng nhập Gmail để đồng bộ danh mục xem trên Máy tính và Điện thoại"
+                title="Đăng nhập Google / Gmail để đồng bộ danh mục xem trên Máy tính và Điện thoại"
                 className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-teal-500/20 border border-indigo-500/40 hover:border-indigo-400 text-indigo-200 hover:text-white text-xs font-bold transition-all shadow-sm shrink-0"
               >
                 <User className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Đăng Nhập Gmail</span>
+                <span className="hidden sm:inline">Đăng Nhập Google</span>
               </button>
             )}
 
