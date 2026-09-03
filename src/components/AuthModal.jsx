@@ -127,7 +127,7 @@ export const AuthModal = ({
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'email profile openid https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata',
+        scope: 'email profile openid',
         callback: async (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             try {
