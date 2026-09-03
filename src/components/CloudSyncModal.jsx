@@ -12,14 +12,13 @@ import {
   RefreshCw,
   Share2,
   KeyRound,
-  ShieldCheck,
-  Database
+  ShieldCheck
 } from 'lucide-react';
 import { 
   loadPortfolioFromGoogleDrive, 
   savePortfolioToGoogleDrive 
 } from '../services/googleDriveSyncService';
-import { formatCurrency } from '../utils/finance';
+import { GOOGLE_CLIENT_ID, loginWithGoogle } from '../services/authService';
 
 export const CloudSyncModal = ({ 
   isOpen, 
@@ -27,6 +26,7 @@ export const CloudSyncModal = ({
   currentUser, 
   data, 
   onApplyPortfolioData,
+  onUserChanged,
   onOpenAuthModal 
 }) => {
   const [pulling, setPulling] = useState(false);
@@ -40,12 +40,90 @@ export const CloudSyncModal = ({
 
   if (!isOpen) return null;
 
+  // Đăng nhập trực tiếp bằng Google GIS ngay tại modal này
+  const handleDirectGoogleLogin = () => {
+    if (!window.google?.accounts?.oauth2) {
+      setStatus({
+        type: 'warning',
+        message: 'Đang tải thư viện xác thực Google, vui lòng thử lại sau 1-2 giây...',
+        time: new Date().toLocaleTimeString('vi-VN')
+      });
+      return;
+    }
+
+    setStatus({
+      type: 'loading',
+      message: 'Đang mở cửa sổ xác thực Google...',
+      time: new Date().toLocaleTimeString('vi-VN')
+    });
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata',
+        callback: async (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            try {
+              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                  Authorization: `Bearer ${tokenResponse.access_token}`
+                }
+              });
+
+              if (res.ok) {
+                const profile = await res.json();
+                const user = loginWithGoogle({
+                  email: profile.email,
+                  name: profile.name,
+                  picture: profile.picture,
+                  accessToken: tokenResponse.access_token
+                });
+
+                if (onUserChanged) {
+                  onUserChanged(user);
+                }
+                setNeedReauth(false);
+                setStatus({
+                  type: 'success',
+                  message: `✓ Đăng nhập Google thành công (${profile.email})! Quyền truy cập đã được làm mới.`,
+                  time: new Date().toLocaleTimeString('vi-VN')
+                });
+              } else {
+                setStatus({
+                  type: 'error',
+                  message: 'Không lấy được thông tin từ Google API.',
+                  time: new Date().toLocaleTimeString('vi-VN')
+                });
+              }
+            } catch (fetchErr) {
+              console.error('Lỗi fetch Google userinfo:', fetchErr);
+              setStatus({
+                type: 'error',
+                message: 'Lỗi kết nối máy chủ Google: ' + fetchErr.message,
+                time: new Date().toLocaleTimeString('vi-VN')
+              });
+            }
+          }
+        }
+      });
+
+      client.requestAccessToken({ prompt: 'select_account' });
+    } catch (err) {
+      console.error('Lỗi mở popup Google:', err);
+      setStatus({
+        type: 'error',
+        message: 'Không thể mở cửa sổ Google. Hãy kiểm tra trình duyệt có chặn popup không.',
+        time: new Date().toLocaleTimeString('vi-VN')
+      });
+    }
+  };
+
   // 1. Tải danh mục từ Google Drive về máy này
   const handlePullFromDrive = async () => {
     if (!currentUser?.accessToken || currentUser?.isGuest) {
       setStatus({
         type: 'warning',
-        message: 'Bạn chưa đăng nhập tài khoản Google hoặc phiên đã hết hạn. Vui lòng bấm Đăng Nhập bên dưới.',
+        message: 'Bạn chưa đăng nhập Google hoặc phiên đã hết hạn. Vui lòng bấm nút [Đăng Nhập Lại] màu vàng bên dưới.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
       setNeedReauth(true);
@@ -100,7 +178,7 @@ export const CloudSyncModal = ({
     if (!currentUser?.accessToken || currentUser?.isGuest) {
       setStatus({
         type: 'warning',
-        message: 'Bạn chưa đăng nhập tài khoản Google hoặc phiên đã hết hạn. Vui lòng bấm Đăng Nhập bên dưới.',
+        message: 'Bạn chưa đăng nhập Google hoặc phiên đã hết hạn. Vui lòng bấm nút [Đăng Nhập Lại] màu vàng bên dưới.',
         time: new Date().toLocaleTimeString('vi-VN')
       });
       setNeedReauth(true);
@@ -221,7 +299,8 @@ export const CloudSyncModal = ({
 
           {currentUser?.isGuest || !currentUser?.accessToken ? (
             <button
-              onClick={onOpenAuthModal}
+              type="button"
+              onClick={handleDirectGoogleLogin}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 text-xs font-black shrink-0 hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm"
             >
               <KeyRound className="w-3.5 h-3.5" />
@@ -260,15 +339,17 @@ export const CloudSyncModal = ({
           </div>
         )}
 
-        {/* Re-authenticate Action if needed */}
+        {/* Re-authenticate Action Button if needed */}
         {needReauth && (
-          <div className="p-3.5 rounded-2xl bg-slate-900 border border-amber-500/40 text-xs mb-5 flex items-center justify-between gap-3">
-            <span className="text-slate-300 text-[11px]">Bấm vào đây để làm mới quyền truy cập Google:</span>
+          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 flex items-center justify-between gap-3">
+            <span className="text-amber-200 text-[11px] font-medium">Phiên đăng nhập đã hết hạn:</span>
             <button
-              onClick={onOpenAuthModal}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs hover:bg-amber-400 transition-all shrink-0"
+              type="button"
+              onClick={handleDirectGoogleLogin}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
             >
-              Đăng Nhập Lại
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Đăng Nhập Lại Ngay</span>
             </button>
           </div>
         )}
@@ -316,7 +397,7 @@ export const CloudSyncModal = ({
                 type="button"
                 disabled={pulling || pushing}
                 onClick={handlePullFromDrive}
-                className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-indigo-500 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 group shadow-sm"
+                className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-indigo-500 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 group shadow-sm cursor-pointer"
               >
                 <DownloadCloud className={`w-4 h-4 text-indigo-400 group-hover:-translate-y-0.5 transition-transform ${pulling ? 'animate-bounce' : ''}`} />
                 <span>{pulling ? 'Đang Tải...' : 'Tải Từ Drive'}</span>
@@ -327,7 +408,7 @@ export const CloudSyncModal = ({
                 type="button"
                 disabled={pulling || pushing}
                 onClick={handlePushToDrive}
-                className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 active:scale-95 group"
+                className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 active:scale-95 group cursor-pointer"
               >
                 <UploadCloud className={`w-4 h-4 group-hover:-translate-y-0.5 transition-transform ${pushing ? 'animate-bounce' : ''}`} />
                 <span>{pushing ? 'Đang Lưu...' : 'Lưu Lên Drive'}</span>
@@ -350,7 +431,7 @@ export const CloudSyncModal = ({
             <button
               type="button"
               onClick={handleCopyMagicLink}
-              className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+              className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                 copiedLink 
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300' 
                   : 'bg-slate-900 hover:bg-slate-850 border-teal-500/40 text-teal-300 hover:border-teal-400'

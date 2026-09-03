@@ -659,7 +659,11 @@ export const App = () => {
             setData(newData);
             savePortfolioData(newData, currentUser.id);
           }}
-          onOpenAuthModal={() => setAuthModalOpen(true)}
+          onUserChanged={handleUserChanged}
+          onOpenAuthModal={() => {
+            setCloudSyncModalOpen(false);
+            setAuthModalOpen(true);
+          }}
         />
       )}
 
