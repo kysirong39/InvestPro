@@ -11,12 +11,17 @@ import {
   History,
   Trash2,
   Settings,
-  CheckCheck
+  CheckCheck,
+  User,
+  Lock,
+  ChevronDown
 } from 'lucide-react';
 import { formatCurrency } from '../utils/finance';
 
 export const Navbar = ({ 
   cashBalance, 
+  currentUser,
+  onOpenAuthModal,
   onOpenBuyModal, 
   onOpenCashModal, 
   onExport, 
@@ -143,6 +148,33 @@ export const Navbar = ({
               <PlusCircle className="w-4 h-4" />
               <span>+ Nhập Lệnh Mua</span>
             </button>
+
+            {/* User Account / Gmail Profile Widget */}
+            {currentUser && !currentUser.isGuest ? (
+              <button
+                onClick={onOpenAuthModal}
+                title={`Đang đăng nhập: ${currentUser.name} (${currentUser.email}) - Bấm để chuyển tài khoản hoặc đăng xuất`}
+                className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-900 border border-indigo-500/40 hover:border-indigo-400 transition-all text-left group shadow-sm"
+              >
+                <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentUser.avatarMeta?.gradient || 'from-indigo-500 to-teal-500'} flex items-center justify-center text-white text-xs font-black shrink-0 shadow-inner`}>
+                  {currentUser.avatarMeta?.char || 'U'}
+                </div>
+                <div className="hidden xl:block pr-1">
+                  <div className="text-[11px] font-extrabold text-white leading-tight truncate max-w-[120px]">{currentUser.name}</div>
+                  <div className="text-[9px] text-slate-400 leading-tight truncate max-w-[120px]">{currentUser.email}</div>
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-white transition-colors" />
+              </button>
+            ) : (
+              <button
+                onClick={onOpenAuthModal}
+                title="Đăng nhập Gmail để quản lý danh mục riêng biệt"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-teal-500/20 border border-indigo-500/40 hover:border-indigo-400 text-indigo-200 hover:text-white text-xs font-bold transition-all shadow-sm group"
+              >
+                <User className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Đăng Nhập Gmail</span>
+              </button>
+            )}
 
           </div>
         </div>

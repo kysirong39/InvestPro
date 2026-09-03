@@ -13,6 +13,7 @@ import { ResetPortfolioModal } from './components/ResetPortfolioModal';
 import { EditHoldingModal } from './components/EditHoldingModal';
 import { QuickPriceUpdaterModal } from './components/QuickPriceUpdaterModal';
 import { ApiSettingsModal } from './components/ApiSettingsModal';
+import { AuthModal } from './components/AuthModal';
 
 import { 
   loadPortfolioData, 
@@ -21,12 +22,17 @@ import {
   exportPortfolioJSON 
 } from './utils/storage';
 
+import { getCurrentUser } from './services/authService';
 import { aggregatePortfolio } from './utils/finance';
 import { fetchLivePricesFromApi, getApiSettings } from './services/marketPriceService';
 
 export const App = () => {
-  // Load saved state or mock data
-  const [data, setData] = useState(() => loadPortfolioData());
+  // Current logged in Gmail / Google User
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Load saved state per user
+  const [data, setData] = useState(() => loadPortfolioData(currentUser.id));
   const { holdings, cashBalance, realizedTrades } = data;
 
   const [activeTab, setActiveTab] = useState('portfolio'); // 'portfolio' | 'history' | 'advisor'
@@ -58,11 +64,20 @@ export const App = () => {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState('');
 
-  // Auto-save whenever holdings, cash or trades change
+  // Handle User Change / Switch Account
+  const handleUserChanged = (newUser) => {
+    setCurrentUser(newUser);
+    const userData = loadPortfolioData(newUser.id);
+    setData(userData);
+  };
+
+  // Auto-save whenever holdings, cash, trades or currentUser change
   useEffect(() => {
-    savePortfolioData({ holdings, cashBalance, realizedTrades });
-    setLastSaved(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-  }, [holdings, cashBalance, realizedTrades]);
+    if (currentUser?.id) {
+      savePortfolioData({ holdings, cashBalance, realizedTrades }, currentUser.id);
+      setLastSaved(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }
+  }, [holdings, cashBalance, realizedTrades, currentUser?.id]);
 
   // Live Price Sync Handler (Chỉ chạy khi người dùng chủ động bấm)
   const handleSyncLivePrices = async () => {
@@ -305,7 +320,7 @@ export const App = () => {
 
   // 10. Reset to Sample
   const handleResetData = () => {
-    const sample = resetToSampleData();
+    const sample = resetToSampleData(currentUser.id);
     if (sample) setData(sample);
   };
 
@@ -315,7 +330,7 @@ export const App = () => {
       holdings,
       cashBalance,
       realizedTrades
-    });
+    }, currentUser.email);
   };
 
   return (
@@ -324,6 +339,8 @@ export const App = () => {
       {/* Top Navigation */}
       <Navbar
         cashBalance={cashBalance}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
         onOpenBuyModal={() => handleOpenBuy(null)}
         onOpenCashModal={() => setCashModalOpen(true)}
         onExport={handleExport}
@@ -478,6 +495,16 @@ export const App = () => {
           tradesCount={realizedTrades.length}
           onConfirmClearAll={handleConfirmClearAll}
           onResetSampleData={handleResetData}
+        />
+      )}
+
+      {/* Gmail / Google Authentication Modal */}
+      {authModalOpen && (
+        <AuthModal
+          isOpen={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+          currentUser={currentUser}
+          onUserChanged={handleUserChanged}
         />
       )}
 
