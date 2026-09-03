@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { PortfolioSummary } from './components/PortfolioSummary';
 import { HoldingsTable } from './components/HoldingsTable';
@@ -35,6 +35,9 @@ export const App = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [cloudSyncModalOpen, setCloudSyncModalOpen] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState('synced'); // 'synced' | 'syncing' | 'error'
+
+  // Ref chống Race Condition: Không cho phép auto-save đẩy dữ liệu trắng lên đè trước khi tải xong từ đám mây
+  const isCloudSyncInitializedRef = useRef(false);
 
   // Load saved state per user
   const [data, setData] = useState(() => loadPortfolioData(currentUser.id));
@@ -103,19 +106,21 @@ export const App = () => {
 
   // Handle User Change / Switch Account with Cross-Device Cloud Sync
   const handleUserChanged = async (newUser) => {
+    isCloudSyncInitializedRef.current = false;
     setCurrentUser(newUser);
     let userData = loadPortfolioData(newUser.id);
     setCloudSyncState('syncing');
 
-    // 1. Tự động tải danh mục từ Google Drive AppData nếu có Access Token
+    // 1. Tự động tải danh mục từ Google Drive của tài khoản
     if (newUser.accessToken) {
       try {
-        const driveData = await loadPortfolioFromGoogleDrive(newUser.accessToken);
-        if (driveData && Array.isArray(driveData.holdings) && driveData.holdings.length > 0) {
-          userData = driveData;
-          savePortfolioData(driveData, newUser.id);
+        const driveRes = await loadPortfolioFromGoogleDrive(newUser.accessToken);
+        if (driveRes.data && Array.isArray(driveRes.data.holdings) && driveRes.data.holdings.length > 0) {
+          userData = driveRes.data;
+          savePortfolioData(driveRes.data, newUser.id);
           setCloudSyncState('synced');
-        } else if (userData.holdings.length > 0) {
+        } else if (userData.holdings && userData.holdings.length > 0) {
+          // Chỉ đẩy lên nếu máy này có dữ liệu và Drive chưa có
           await savePortfolioToGoogleDrive(userData, newUser.accessToken);
           setCloudSyncState('synced');
         }
@@ -124,24 +129,44 @@ export const App = () => {
       }
     }
 
-    // 2. Dự phòng Cloud Storage theo Gmail
-    if (!newUser.isGuest && newUser.email && (!userData.holdings || userData.holdings.length === 0)) {
-      try {
-        const cloudData = await fetchPortfolioFromCloud(newUser.email);
-        if (cloudData && Array.isArray(cloudData.holdings) && cloudData.holdings.length > 0) {
-          userData = cloudData;
-          savePortfolioData(cloudData, newUser.id);
-        } else if (userData.holdings.length > 0) {
-          syncPortfolioToCloud(userData, newUser.email);
-        }
-      } catch (err) {
-        console.warn('Lỗi cloud sync:', err);
-      }
-    }
-
     setData(userData);
+    isCloudSyncInitializedRef.current = true;
     setCloudSyncState('synced');
   };
+
+  // Auto-sync on window focus (khi chuyển qua lại giữa các tab hoặc từ máy tính sang điện thoại)
+  useEffect(() => {
+    const handleFocus = async () => {
+      if (currentUser?.accessToken && !currentUser.isGuest) {
+        try {
+          const driveRes = await loadPortfolioFromGoogleDrive(currentUser.accessToken);
+          if (driveRes.data && Array.isArray(driveRes.data.holdings) && driveRes.data.holdings.length > 0) {
+            const currentCount = holdings.length;
+            const remoteCount = driveRes.data.holdings.length;
+            if (remoteCount !== currentCount || JSON.stringify(driveRes.data.holdings) !== JSON.stringify(holdings)) {
+              setData(driveRes.data);
+              savePortfolioData(driveRes.data, currentUser.id);
+              setCloudSyncState('synced');
+            }
+          }
+        } catch (e) {
+          // ignore focus error
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [currentUser?.accessToken, currentUser?.id, holdings]);
+
+  // Initial cloud sync on boot for returning logged-in users
+  useEffect(() => {
+    if (currentUser?.accessToken && !currentUser.isGuest) {
+      handleUserChanged(currentUser);
+    } else {
+      isCloudSyncInitializedRef.current = true;
+    }
+  }, []);
 
   // Auto-save & background Cloud Sync whenever holdings, cash, trades or currentUser change
   useEffect(() => {
@@ -149,14 +174,9 @@ export const App = () => {
       savePortfolioData({ holdings, cashBalance, realizedTrades }, currentUser.id);
       setLastSaved(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
-      // Đồng bộ ngầm lên Google Drive AppData của tài khoản
-      if (currentUser.accessToken) {
+      // CHỈ đẩy lên Google Drive khi đã hoàn thành bước kiểm tra/tải dữ liệu ban đầu
+      if (isCloudSyncInitializedRef.current && currentUser.accessToken) {
         savePortfolioToGoogleDrive({ holdings, cashBalance, realizedTrades }, currentUser.accessToken);
-      }
-
-      // Đồng bộ ngầm lên Cloud Storage
-      if (!currentUser.isGuest && currentUser.email) {
-        syncPortfolioToCloud({ holdings, cashBalance, realizedTrades }, currentUser.email);
       }
     }
   }, [holdings, cashBalance, realizedTrades, currentUser?.id, currentUser?.accessToken]);
