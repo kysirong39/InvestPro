@@ -147,14 +147,25 @@ export const Navbar = ({
             {/* User Account / Gmail Profile Widget */}
             {currentUser && !currentUser.isGuest ? (
               <div className="flex items-center gap-1 shrink-0">
-                {/* Manual Cloud Sync Button */}
+                {/* Auto Cloud Sync Status & Hub Button */}
                 <button
                   onClick={onManualCloudSync}
-                  title="Đồng bộ ngay với Google Drive & Đám Mây (Tải hoặc cập nhật giữa Máy tính & Điện thoại)"
-                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all shadow-sm group"
+                  title="Tự động đồng bộ với Google Drive (Bấm để xem chi tiết hoặc sao chép link chia sẻ)"
+                  className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 text-xs font-bold transition-all shadow-sm group"
                 >
-                  <Cloud className={`w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform ${cloudSyncState === 'syncing' ? 'animate-pulse text-amber-400' : ''}`} />
-                  <span className="hidden xl:inline text-[11px]">Đồng Bộ</span>
+                  <Cloud className={`w-3.5 h-3.5 ${
+                    cloudSyncState === 'syncing' 
+                      ? 'animate-pulse text-amber-400' 
+                      : cloudSyncState === 'error'
+                      ? 'text-rose-400'
+                      : 'text-emerald-400 group-hover:scale-110 transition-transform'
+                  }`} />
+                  <span className="hidden xl:inline text-[11px] font-bold">
+                    {cloudSyncState === 'syncing' ? 'Đang lưu...' : cloudSyncState === 'error' ? 'Lỗi Sync' : 'Google Drive'}
+                  </span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    cloudSyncState === 'syncing' ? 'bg-amber-400 animate-ping' : cloudSyncState === 'error' ? 'bg-rose-500' : 'bg-emerald-400'
+                  }`} />
                 </button>
 
                 <button

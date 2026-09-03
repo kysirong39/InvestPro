@@ -1,47 +1,39 @@
 /**
  * Google Drive AppData & Cloud Sync Service (Bulletproof Cross-Device Engine)
- * Đảm bảo 100% không bao giờ bị ghi đè danh mục trắng khi đăng nhập trên máy tính mới.
+ * Tự động lưu và tải dữ liệu lên Google Drive thông qua API đã kích hoạt.
  */
 
 const GOOGLE_DRIVE_FILENAME = 'investpro_portfolio_master.json';
 
 /**
- * Tìm file danh mục trong Google Drive của người dùng (Thử cả AppDataFolder và Root Drive)
+ * Tìm file danh mục trong Google Drive của người dùng (Hỗ trợ AppDataFolder và Root Drive)
  */
 export const findGoogleDriveFile = async (accessToken) => {
   if (!accessToken) return { file: null, error: 'Chưa có Access Token Google' };
   try {
-    // 1. Tìm trong AppDataFolder trước
     const query = encodeURIComponent(`name = '${GOOGLE_DRIVE_FILENAME}' and trashed = false`);
-    const appDataRes = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${query}&fields=files(id,name,modifiedTime,size)`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    });
+    
+    // 1. Tìm trong AppDataFolder trước (Không gian ẩn bảo mật riêng cho app)
+    try {
+      const appDataRes = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${query}&fields=files(id,name,modifiedTime,size)`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
 
-    if (appDataRes.ok) {
-      const data = await appDataRes.json();
-      if (data.files && data.files.length > 0) {
-        return { file: data.files[0], space: 'appDataFolder', error: null };
+      if (appDataRes.ok) {
+        const data = await appDataRes.json();
+        if (data.files && data.files.length > 0) {
+          return { file: data.files[0], space: 'appDataFolder', error: null };
+        }
+      } else if (appDataRes.status === 401) {
+        return { file: null, error: 'Phiên Google đã hết hạn', needReauth: true };
       }
-    } else {
-      const errData = await appDataRes.json().catch(() => ({}));
-      const msg = errData?.error?.message || '';
-      const is401 = appDataRes.status === 401;
-      const needEnable = msg.includes('disabled') || msg.includes('not been used');
-      return { 
-        file: null, 
-        error: is401 ? 'Phiên đăng nhập Google đã hết hạn. Vui lòng bấm Đăng Nhập để làm mới.' : msg,
-        needReauth: is401,
-        needEnableApi: needEnable
-      };
+    } catch (e) {
+      console.warn('Lỗi tìm trong appDataFolder:', e);
     }
 
-    // 2. Tìm trong Drive thường nếu appDataFolder chưa có file
+    // 2. Tìm trong Drive thường
     const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,modifiedTime,size)`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     if (driveRes.ok) {
@@ -49,9 +41,20 @@ export const findGoogleDriveFile = async (accessToken) => {
       if (data.files && data.files.length > 0) {
         return { file: data.files[0], space: 'drive', error: null };
       }
+    } else {
+      const errData = await driveRes.json().catch(() => ({}));
+      const msg = errData?.error?.message || '';
+      const is401 = driveRes.status === 401;
+      const needEnable = msg.includes('disabled') || msg.includes('not been used');
+      return { 
+        file: null, 
+        error: is401 ? 'Phiên Google đã hết hạn. Vui lòng bấm Đăng Nhập để làm mới.' : msg,
+        needReauth: is401,
+        needEnableApi: needEnable
+      };
     }
 
-    return { file: null, error: null }; // Chưa có file (hợp lệ cho tài khoản hoàn toàn mới)
+    return { file: null, error: null }; // Chưa có file
   } catch (err) {
     return { file: null, error: err.message };
   }
@@ -69,13 +72,11 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
     }
 
     if (!file || !file.id) {
-      return { data: null, error: 'Chưa có dữ liệu danh mục trên Google Drive của tài khoản này.', isNewUser: true };
+      return { data: null, error: 'Chưa có file danh mục trên Google Drive', isNewUser: true };
     }
 
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
 
     if (res.ok) {
@@ -96,7 +97,8 @@ export const loadPortfolioFromGoogleDrive = async (accessToken) => {
 };
 
 /**
- * Lưu / Đồng bộ danh mục lên Google Drive (Có cơ chế chống ghi đè trắng)
+ * Lưu / Tự động đồng bộ danh mục lên Google Drive
+ * Sử dụng quy trình 2 bước chuẩn quốc tế: Tạo file Metadata -> Đẩy nội dung JSON
  */
 export const savePortfolioToGoogleDrive = async (portfolioData, accessToken) => {
   if (!accessToken) return { success: false, error: 'Chưa có Access Token' };
@@ -106,7 +108,6 @@ export const savePortfolioToGoogleDrive = async (portfolioData, accessToken) => 
       return { success: false, error, needEnableApi, needReauth };
     }
 
-    // Bảo vệ: Nếu dữ liệu chuẩn bị lưu trống nhưng trên Drive đã có dữ liệu trước đó, cảnh báo và từ chối ghi đè
     const cleanHoldings = Array.isArray(portfolioData?.holdings) ? portfolioData.holdings : [];
 
     const payload = {
@@ -121,53 +122,64 @@ export const savePortfolioToGoogleDrive = async (portfolioData, accessToken) => 
 
     const content = JSON.stringify(payload, null, 2);
 
-    if (file && file.id) {
-      // Cập nhật file đã có
-      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=media`, {
-        method: 'PATCH',
+    let targetFileId = file?.id;
+
+    // Nếu chưa có file trên Google Drive, tạo file mới (Bước 1)
+    if (!targetFileId) {
+      let createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: content
+        body: JSON.stringify({
+          name: GOOGLE_DRIVE_FILENAME,
+          parents: ['appDataFolder']
+        })
       });
 
-      if (res.ok) {
-        return { success: true, error: null, fileId: file.id };
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        return { success: false, error: errData?.error?.message || `Lỗi cập nhật (HTTP ${res.status})` };
+      // Nếu appDataFolder bị từ chối, tạo ở thư mục gốc Drive
+      if (!createRes.ok) {
+        createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: GOOGLE_DRIVE_FILENAME
+          })
+        });
       }
-    } else {
-      // Tạo file mới trong appDataFolder
-      const metadata = {
-        name: GOOGLE_DRIVE_FILENAME,
-        parents: ['appDataFolder']
-      };
 
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', new Blob([content], { type: 'application/json' }));
-
-      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        },
-        body: form
-      });
-
-      if (res.ok) {
-        const newFile = await res.json();
-        return { success: true, error: null, fileId: newFile.id };
+      if (createRes.ok) {
+        const createdFile = await createRes.json();
+        targetFileId = createdFile.id;
       } else {
-        const errData = await res.json().catch(() => ({}));
+        const errData = await createRes.json().catch(() => ({}));
         return { 
           success: false, 
-          error: errData?.error?.message || `Lỗi tạo file (HTTP ${res.status})`,
+          error: errData?.error?.message || `Lỗi khởi tạo file (HTTP ${createRes.status})`,
           needEnableApi: errData?.error?.message?.includes('disabled') || errData?.error?.message?.includes('not been used')
         };
       }
+    }
+
+    // Đẩy nội dung dữ liệu JSON vào file (Bước 2)
+    const uploadRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=media`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: content
+    });
+
+    if (uploadRes.ok) {
+      return { success: true, error: null, fileId: targetFileId };
+    } else {
+      const errData = await uploadRes.json().catch(() => ({}));
+      return { success: false, error: errData?.error?.message || `Lỗi ghi nội dung (HTTP ${uploadRes.status})` };
     }
   } catch (err) {
     return { success: false, error: err.message };
