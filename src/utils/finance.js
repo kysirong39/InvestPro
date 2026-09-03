@@ -94,9 +94,11 @@ export const getUnrealizedPnL = (holding) => {
 
 // Đánh giá hiệu suất và thông số của một lô đơn lẻ
 export const getLotMetrics = (lot, currentPrice) => {
-  const remaining = Number(lot.remainingQty) || 0;
+  const remaining = Number(lot.remainingQty) !== undefined ? Number(lot.remainingQty) : Number(lot.quantity) || 0;
   const buyPrice = Number(lot.buyPrice) || 0;
-  const cost = remaining * buyPrice + (Number(lot.fee) || 0) + (Number(lot.tax) || 0);
+  const origQty = Number(lot.quantity) || remaining;
+  const feeRatio = origQty > 0 ? remaining / origQty : 1;
+  const cost = remaining * buyPrice + ((Number(lot.fee) || 0) + (Number(lot.tax) || 0)) * feeRatio;
   const currentVal = remaining * (currentPrice || buyPrice);
   const pnl = currentVal - cost;
   const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0;

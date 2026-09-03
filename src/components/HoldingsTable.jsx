@@ -382,7 +382,7 @@ export const HoldingsTable = ({
                                   title={`Lô ${lIdx + 1} mua ngày ${lot.date}: Mua giá ${formatCurrency(lot.buyPrice)} - KL: ${formatNumber(lot.remainingQty)} CP`}
                                 >
                                   <span className="text-[9px] text-amber-400 font-bold">#{lIdx + 1}:</span>
-                                  <strong className="text-amber-300 font-extrabold">{formatCurrency(lot.buyPrice, 'VND', true)}</strong>
+                                  <strong className="text-amber-300 font-extrabold">{formatCurrency(lot.buyPrice)}</strong>
                                   <span className="text-[9px] text-slate-400 font-medium">({formatNumber(lot.remainingQty)})</span>
                                 </div>
                               );
@@ -403,7 +403,7 @@ export const HoldingsTable = ({
                         {/* 5. WEIGHTED AVERAGE COST (GIÁ VỐN BÌNH QUÂN) */}
                         <td className="py-2.5 px-2 text-right font-numeric bg-indigo-950/20 border-x border-indigo-900/30">
                           <div className="font-extrabold text-indigo-300 text-xs sm:text-sm">
-                            {formatCurrency(avgPrice, 'VND', true)}
+                            {formatCurrency(avgPrice)}
                           </div>
                           <div className="text-[9px] text-indigo-400/70 font-medium">
                             Giá vốn TB
@@ -441,7 +441,7 @@ export const HoldingsTable = ({
                         {/* 7. Unrealized PnL (LÃI / LỖ TẠM TÍNH) */}
                         <td className="py-2.5 px-2 text-right font-numeric">
                           <div className={`font-extrabold text-xs sm:text-sm ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {isProfit ? '+' : ''}{formatCurrency(pnl, 'VND', true)}
+                            {isProfit ? '+' : ''}{formatCurrency(pnl)}
                           </div>
                           <span className={`inline-block px-1 py-0.2 rounded text-[10px] font-bold ${
                             isProfit ? 'text-emerald-400' : 'text-rose-400'
@@ -452,7 +452,7 @@ export const HoldingsTable = ({
 
                         {/* 8. Market Value (TỔNG GIÁ TRỊ) */}
                         <td className="py-2.5 px-2.5 text-right font-numeric font-extrabold text-slate-100 text-xs sm:text-sm">
-                          {formatCurrency(marketVal, 'VND', true)}
+                          {formatCurrency(marketVal)}
                         </td>
 
                       </tr>
@@ -595,7 +595,7 @@ export const HoldingsTable = ({
                   
                   {/* 1. THAO TÁC / LABEL */}
                   <td className="py-3 px-2 text-center">
-                    <div className="flex items-center justify-center gap-1.5 text-xs font-black uppercase text-indigo-300 tracking-wider">
+                    <div className="flex items-center justify-center gap-1 text-xs font-black uppercase text-indigo-300 tracking-wider">
                       <BarChart2 className="w-3.5 h-3.5 text-indigo-400" />
                       <span>TỔNG CỘNG</span>
                     </div>
@@ -608,34 +608,32 @@ export const HoldingsTable = ({
 
                   {/* 3. TỔNG VỐN MUA VÀO (GIÁ MUA) */}
                   <td className="py-3 px-2.5 bg-amber-950/20 border-l border-amber-900/40">
-                    <div className="text-[10px] font-medium text-amber-400/80">Tổng vốn mua vào:</div>
+                    <div className="text-[10px] font-medium text-amber-400/80">Tổng vốn mua:</div>
                     <div className="font-numeric font-black text-amber-300 text-xs sm:text-sm">
-                      {formatCurrency(totalCostBasis, 'VND', true)}
+                      {formatCurrency(totalCostBasis)}
                     </div>
                   </td>
 
                   {/* 4. TỔNG KHỐI LƯỢNG */}
                   <td className="py-3 px-2 text-right font-numeric font-extrabold text-slate-200 text-xs sm:text-sm">
-                    {formatNumber(totalShares)}
+                    {formatNumber(totalShares)} CP
                   </td>
 
-                  {/* 5. GIÁ VỐN TB */}
+                  {/* 5. GIÁ VỐN TB (WAC CHUNG) */}
                   <td className="py-3 px-2 text-right font-numeric bg-indigo-950/30 text-indigo-300 border-x border-indigo-900/40 text-xs sm:text-sm font-black">
-                    {formatCurrency(totalCostBasis, 'VND', true)}
+                    <div className="text-[10px] font-medium text-indigo-400/70">WAC TB:</div>
+                    <div>{formatCurrency(totalShares > 0 ? totalCostBasis / totalShares : 0)}</div>
                   </td>
 
-                  {/* 6. TỔNG GIÁ TRỊ THỊ TRƯỜNG */}
-                  <td className="py-3 px-2 text-right bg-emerald-950/20 border-r border-emerald-900/40">
-                    <div className="text-[10px] font-medium text-emerald-400/80">Tổng giá TT:</div>
-                    <div className="font-numeric font-black text-emerald-300 text-xs sm:text-sm">
-                      {formatCurrency(totalMarketValue, 'VND', true)}
-                    </div>
+                  {/* 6. GIÁ THỊ TRƯỜNG */}
+                  <td className="py-3 px-2 text-center bg-emerald-950/20 border-r border-emerald-900/40 text-slate-500">
+                    —
                   </td>
 
                   {/* 7. TỔNG LÃI / LỖ */}
                   <td className="py-3 px-2 text-right font-numeric">
                     <div className={`font-black text-xs sm:text-sm ${isTotalProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isTotalProfit ? '+' : ''}{formatCurrency(totalPnL, 'VND', true)}
+                      {isTotalProfit ? '+' : ''}{formatCurrency(totalPnL)}
                     </div>
                     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black ${
                       isTotalProfit ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/25 text-rose-300 border border-rose-500/40'
@@ -644,9 +642,10 @@ export const HoldingsTable = ({
                     </span>
                   </td>
 
-                  {/* 8. TỔNG GIÁ TRỊ */}
+                  {/* 8. TỔNG GIÁ TRỊ THỊ TRƯỜNG */}
                   <td className="py-3 px-2.5 text-right font-numeric font-black text-white text-xs sm:text-sm">
-                    {formatCurrency(totalMarketValue, 'VND', true)}
+                    <div className="text-[10px] font-medium text-slate-400">Tổng giá trị TT:</div>
+                    <div className="text-emerald-400 text-sm sm:text-base">{formatCurrency(totalMarketValue)}</div>
                   </td>
 
                 </tr>
