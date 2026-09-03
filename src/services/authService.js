@@ -73,6 +73,7 @@ export const loginWithGoogle = (profile) => {
     email: cleanEmail,
     name: profile.name || cleanEmail.split('@')[0],
     avatar: profile.picture || profile.avatar || '',
+    accessToken: profile.accessToken || '',
     isGuest: false,
     provider: 'google',
     lastLoginAt: new Date().toISOString(),

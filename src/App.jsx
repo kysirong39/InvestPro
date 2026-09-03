@@ -24,6 +24,7 @@ import {
 
 import { getCurrentUser } from './services/authService';
 import { fetchPortfolioFromCloud, syncPortfolioToCloud } from './services/cloudSyncService';
+import { loadPortfolioFromGoogleDrive, savePortfolioToGoogleDrive } from './services/googleDriveSyncService';
 import { aggregatePortfolio } from './utils/finance';
 import { fetchLivePricesFromApi, getApiSettings } from './services/marketPriceService';
 
@@ -31,6 +32,7 @@ export const App = () => {
   // Current logged in Gmail / Google User
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [cloudSyncState, setCloudSyncState] = useState('synced'); // 'synced' | 'syncing' | 'error'
 
   // Load saved state per user
   const [data, setData] = useState(() => loadPortfolioData(currentUser.id));
@@ -69,9 +71,27 @@ export const App = () => {
   const handleUserChanged = async (newUser) => {
     setCurrentUser(newUser);
     let userData = loadPortfolioData(newUser.id);
+    setCloudSyncState('syncing');
 
-    // Nếu đăng nhập bằng Gmail, thử nạp dữ liệu từ Cloud (từ máy tính hoặc điện thoại trước đó)
-    if (!newUser.isGuest && newUser.email) {
+    // 1. Tự động tải danh mục từ Google Drive AppData nếu có Access Token
+    if (newUser.accessToken) {
+      try {
+        const driveData = await loadPortfolioFromGoogleDrive(newUser.accessToken);
+        if (driveData && Array.isArray(driveData.holdings) && driveData.holdings.length > 0) {
+          userData = driveData;
+          savePortfolioData(driveData, newUser.id);
+          setCloudSyncState('synced');
+        } else if (userData.holdings.length > 0) {
+          await savePortfolioToGoogleDrive(userData, newUser.accessToken);
+          setCloudSyncState('synced');
+        }
+      } catch (driveErr) {
+        console.warn('Lỗi Google Drive sync:', driveErr);
+      }
+    }
+
+    // 2. Dự phòng Cloud Storage theo Gmail
+    if (!newUser.isGuest && newUser.email && (!userData.holdings || userData.holdings.length === 0)) {
       try {
         const cloudData = await fetchPortfolioFromCloud(newUser.email);
         if (cloudData && Array.isArray(cloudData.holdings) && cloudData.holdings.length > 0) {
@@ -86,6 +106,7 @@ export const App = () => {
     }
 
     setData(userData);
+    setCloudSyncState('synced');
   };
 
   // Auto-save & background Cloud Sync whenever holdings, cash, trades or currentUser change
@@ -94,12 +115,17 @@ export const App = () => {
       savePortfolioData({ holdings, cashBalance, realizedTrades }, currentUser.id);
       setLastSaved(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
-      // Đồng bộ ngầm lên Đám mây để điện thoại hoặc máy khác xem được
+      // Đồng bộ ngầm lên Google Drive AppData của tài khoản
+      if (currentUser.accessToken) {
+        savePortfolioToGoogleDrive({ holdings, cashBalance, realizedTrades }, currentUser.accessToken);
+      }
+
+      // Đồng bộ ngầm lên Cloud Storage
       if (!currentUser.isGuest && currentUser.email) {
         syncPortfolioToCloud({ holdings, cashBalance, realizedTrades }, currentUser.email);
       }
     }
-  }, [holdings, cashBalance, realizedTrades, currentUser?.id]);
+  }, [holdings, cashBalance, realizedTrades, currentUser?.id, currentUser?.accessToken]);
 
   // Live Price Sync Handler (Chỉ chạy khi người dùng chủ động bấm)
   const handleSyncLivePrices = async () => {
@@ -355,6 +381,42 @@ export const App = () => {
     }, currentUser.email);
   };
 
+  // Manual Cloud Sync Trigger
+  const handleManualCloudSync = async () => {
+    if (!currentUser || currentUser.isGuest) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setCloudSyncState('syncing');
+    let synced = false;
+
+    if (currentUser.accessToken) {
+      try {
+        const driveData = await loadPortfolioFromGoogleDrive(currentUser.accessToken);
+        if (driveData && Array.isArray(driveData.holdings) && driveData.holdings.length > 0) {
+          setData(driveData);
+          savePortfolioData(driveData, currentUser.id);
+          synced = true;
+          alert('✓ Đã tải và đồng bộ danh mục mới nhất từ tài khoản Google của bạn!');
+        } else {
+          await savePortfolioToGoogleDrive({ holdings, cashBalance, realizedTrades }, currentUser.accessToken);
+          synced = true;
+          alert('✓ Đã lưu và đồng bộ danh mục lên Google Drive thành công!');
+        }
+      } catch (e) {
+        console.warn('Lỗi sync Drive:', e);
+      }
+    }
+
+    if (!synced && currentUser.email) {
+      const ok = await syncPortfolioToCloud({ holdings, cashBalance, realizedTrades }, currentUser.email);
+      if (ok) alert('✓ Đã đồng bộ danh mục lên đám mây thành công!');
+    }
+
+    setCloudSyncState('synced');
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0e17] text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
       
@@ -362,6 +424,8 @@ export const App = () => {
       <Navbar
         cashBalance={cashBalance}
         currentUser={currentUser}
+        cloudSyncState={cloudSyncState}
+        onManualCloudSync={handleManualCloudSync}
         onOpenAuthModal={() => setAuthModalOpen(true)}
         onOpenBuyModal={() => handleOpenBuy(null)}
         onOpenCashModal={() => setCashModalOpen(true)}

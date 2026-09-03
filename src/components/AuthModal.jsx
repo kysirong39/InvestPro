@@ -127,7 +127,7 @@ export const AuthModal = ({
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'email profile openid',
+        scope: 'email profile openid https://www.googleapis.com/auth/drive.appdata',
         callback: async (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             try {
@@ -143,7 +143,8 @@ export const AuthModal = ({
                 const user = loginWithGoogle({
                   email: profile.email,
                   name: profile.name,
-                  picture: profile.picture
+                  picture: profile.picture,
+                  accessToken: tokenResponse.access_token
                 });
 
                 onUserChanged(user);

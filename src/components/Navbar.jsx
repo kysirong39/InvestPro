@@ -14,13 +14,16 @@ import {
   CheckCheck,
   User,
   Lock,
-  ChevronDown
+  ChevronDown,
+  Cloud
 } from 'lucide-react';
 import { formatCurrency } from '../utils/finance';
 
 export const Navbar = ({ 
   cashBalance, 
   currentUser,
+  cloudSyncState,
+  onManualCloudSync,
   onOpenAuthModal,
   onOpenBuyModal, 
   onOpenCashModal, 
@@ -143,28 +146,40 @@ export const Navbar = ({
 
             {/* User Account / Gmail Profile Widget */}
             {currentUser && !currentUser.isGuest ? (
-              <button
-                onClick={onOpenAuthModal}
-                title={`Đang đăng nhập: ${currentUser.name} (${currentUser.email}) - Bấm để xem hoặc đổi tài khoản`}
-                className="flex items-center gap-1.5 p-1 sm:p-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left shadow-sm shrink-0"
-              >
-                {currentUser.avatar ? (
-                  <img 
-                    src={currentUser.avatar} 
-                    alt={currentUser.name} 
-                    className="w-7 h-7 rounded-lg object-cover border border-emerald-500/50 shadow-inner shrink-0"
-                  />
-                ) : (
-                  <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentUser.avatarMeta?.gradient || 'from-emerald-500 to-teal-500'} flex items-center justify-center text-white text-xs font-black shrink-0 shadow-inner`}>
-                    {currentUser.avatarMeta?.char || 'U'}
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Manual Cloud Sync Button */}
+                <button
+                  onClick={onManualCloudSync}
+                  title="Đồng bộ ngay với Google Drive & Đám Mây (Tải hoặc cập nhật giữa Máy tính & Điện thoại)"
+                  className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all shadow-sm group"
+                >
+                  <Cloud className={`w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform ${cloudSyncState === 'syncing' ? 'animate-pulse text-amber-400' : ''}`} />
+                  <span className="hidden xl:inline text-[11px]">Đồng Bộ</span>
+                </button>
+
+                <button
+                  onClick={onOpenAuthModal}
+                  title={`Đang đăng nhập: ${currentUser.name} (${currentUser.email}) - Bấm để xem hoặc đổi tài khoản`}
+                  className="flex items-center gap-1.5 p-1 sm:p-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left shadow-sm"
+                >
+                  {currentUser.avatar ? (
+                    <img 
+                      src={currentUser.avatar} 
+                      alt={currentUser.name} 
+                      className="w-7 h-7 rounded-lg object-cover border border-emerald-500/50 shadow-inner shrink-0"
+                    />
+                  ) : (
+                    <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentUser.avatarMeta?.gradient || 'from-emerald-500 to-teal-500'} flex items-center justify-center text-white text-xs font-black shrink-0 shadow-inner`}>
+                      {currentUser.avatarMeta?.char || 'U'}
+                    </div>
+                  )}
+                  <div className="hidden lg:block pr-1">
+                    <div className="text-[11px] font-extrabold text-white leading-tight truncate max-w-[100px]">{currentUser.name}</div>
+                    <div className="text-[9px] text-emerald-400 font-numeric leading-tight truncate max-w-[100px]">{currentUser.email}</div>
                   </div>
-                )}
-                <div className="hidden lg:block pr-1">
-                  <div className="text-[11px] font-extrabold text-white leading-tight truncate max-w-[100px]">{currentUser.name}</div>
-                  <div className="text-[9px] text-emerald-400 font-numeric leading-tight truncate max-w-[100px]">{currentUser.email}</div>
-                </div>
-                <ChevronDown className="w-3 h-3 text-slate-400 hidden sm:block" />
-              </button>
+                  <ChevronDown className="w-3 h-3 text-slate-400 hidden sm:block" />
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onOpenAuthModal}
