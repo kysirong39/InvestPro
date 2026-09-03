@@ -12,13 +12,17 @@ import {
   RefreshCw,
   Share2,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Download,
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import { 
   loadPortfolioFromGoogleDrive, 
   savePortfolioToGoogleDrive 
 } from '../services/googleDriveSyncService';
 import { GOOGLE_CLIENT_ID, loginWithGoogle } from '../services/authService';
+import { exportPortfolioJSON } from '../utils/storage';
 
 export const CloudSyncModal = ({ 
   isOpen, 
@@ -36,26 +40,21 @@ export const CloudSyncModal = ({
   const [status, setStatus] = useState({ type: 'idle', message: '', time: '' });
   const [needEnableApi, setNeedEnableApi] = useState(false);
   const [needDriveConsent, setNeedDriveConsent] = useState(false);
+  const [google403Error, setGoogle403Error] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
 
-  // Cấp quyền Google Drive theo yêu cầu (Incremental Drive Scope Request)
+  // Cấp quyền Google Drive
   const requestDriveScope = (onSuccess) => {
-    if (!window.google?.accounts?.oauth2) {
-      setStatus({
-        type: 'warning',
-        message: 'Đang tải thư viện Google, vui lòng thử lại sau 1-2 giây...',
-        time: new Date().toLocaleTimeString('vi-VN')
-      });
-      return;
-    }
+    if (!window.google?.accounts?.oauth2) return;
 
     setStatus({
       type: 'loading',
-      message: 'Đang mở cửa sổ xin quyền lưu trữ Google Drive...',
+      message: 'Đang mở cửa sổ cấp quyền Google Drive...',
       time: new Date().toLocaleTimeString('vi-VN')
     });
+    setGoogle403Error(false);
 
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
@@ -69,13 +68,17 @@ export const CloudSyncModal = ({
             };
             if (onUserChanged) onUserChanged(updatedUser);
             setNeedDriveConsent(false);
+            setGoogle403Error(false);
             if (onSuccess) {
               onSuccess(tokenResponse.access_token);
             }
           } else if (tokenResponse?.error) {
+            if (tokenResponse.error === 'access_denied' || tokenResponse.error_description?.includes('blocked')) {
+              setGoogle403Error(true);
+            }
             setStatus({
               type: 'error',
-              message: 'Lỗi cấp quyền Google: ' + tokenResponse.error,
+              message: 'Google từ chối cấp quyền Drive (Error: ' + tokenResponse.error + '). Hãy xem hướng dẫn bên dưới.',
               time: new Date().toLocaleTimeString('vi-VN')
             });
           }
@@ -261,7 +264,7 @@ export const CloudSyncModal = ({
     }
   };
 
-  // 3. Tạo Magic Sync Link
+  // 3. Tạo Magic Sync Link (Link chuyển nhanh sang điện thoại / máy khác)
   const handleCopyMagicLink = () => {
     try {
       const payload = {
@@ -283,10 +286,38 @@ export const CloudSyncModal = ({
 
       navigator.clipboard.writeText(syncUrl);
       setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 3000);
+      setTimeout(() => setCopiedLink(false), 3500);
     } catch (err) {
       console.error('Lỗi tạo link:', err);
     }
+  };
+
+  // 4. Nhập file JSON thủ công
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result);
+        if (json && Array.isArray(json.holdings)) {
+          onApplyPortfolioData(json);
+          setStatus({
+            type: 'success',
+            message: `✓ Đã nạp thành công ${json.holdings.length} mã cổ phiếu từ file sao lưu!`,
+            time: new Date().toLocaleTimeString('vi-VN')
+          });
+        }
+      } catch (err) {
+        setStatus({
+          type: 'error',
+          message: 'File không đúng định dạng InvestPro JSON.',
+          time: new Date().toLocaleTimeString('vi-VN')
+        });
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -301,15 +332,15 @@ export const CloudSyncModal = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-1.5">
-                <span>Trung Tâm Đồng Bộ Google Drive</span>
+                <span>Trung Tâm Đồng Bộ Danh Mục</span>
               </h3>
-              <p className="text-[11px] text-slate-400">Đồng bộ tự động & thủ công giữa Máy tính và Điện thoại</p>
+              <p className="text-[11px] text-slate-400">Đồng bộ giữa Máy tính & Điện thoại linh hoạt</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -335,7 +366,7 @@ export const CloudSyncModal = ({
             <button
               type="button"
               onClick={handleDirectGoogleLogin}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 text-xs font-black shrink-0 hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 text-xs font-black shrink-0 hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm cursor-pointer"
             >
               <KeyRound className="w-3.5 h-3.5" />
               <span>Đăng Nhập Google</span>
@@ -373,20 +404,42 @@ export const CloudSyncModal = ({
           </div>
         )}
 
+        {/* Google 403 Access Blocked Specific Guide */}
+        {google403Error && (
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/50 text-xs mb-5 space-y-2.5">
+            <div className="flex items-center gap-2 font-bold text-rose-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Google Chặn Quyền Drive (Lỗi 403 Access Blocked)</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Google yêu cầu bạn thêm email <strong className="text-white">kysirong39@gmail.com</strong> vào danh sách <strong>Test users</strong> trên Google Cloud Console (hoặc sử dụng tính năng <strong>Link Mở Nhanh</strong> bên dưới không bị chặn).
+            </p>
+            <a
+              href="https://console.cloud.google.com/apis/credentials/consent?project=348083573261"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500 text-white font-black text-xs hover:bg-rose-400 transition-all shadow-md"
+            >
+              <span>Thêm Test User trên Google Console (30s)</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        )}
+
         {/* Grant Drive Permission Box */}
-        {needDriveConsent && (
+        {needDriveConsent && !google403Error && (
           <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 text-xs mb-5 space-y-3">
             <div className="flex items-center gap-2 font-bold text-amber-400">
               <KeyRound className="w-4 h-4 shrink-0" />
-              <span>Cấp Quyền Lưu File Vào Google Drive</span>
+              <span>Yêu Cầu Cấp Quyền Google Drive</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Google yêu cầu xác nhận cho phép ứng dụng tạo tệp lưu trữ danh mục trên Google Drive của bạn.
+              Để lưu tệp danh mục trực tiếp vào Google Drive, bạn cần xác nhận cấp quyền 1 lần.
             </p>
             <button
               type="button"
               onClick={() => requestDriveScope((newToken) => handlePushToDrive(newToken))}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               <KeyRound className="w-4 h-4" />
               <span>Bấm Vào Đây Để Cấp Quyền Google Drive</span>
@@ -402,7 +455,7 @@ export const CloudSyncModal = ({
               <span>Yêu cầu kích hoạt Google Drive API (Chỉ làm 1 lần)</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Google yêu cầu bật dịch vụ <strong>Google Drive API</strong> trên dự án Google Cloud của bạn để cho phép lưu trữ danh mục.
+              Google yêu cầu bật dịch vụ <strong>Google Drive API</strong> trên dự án Google Cloud của bạn.
             </p>
             <a
               href="https://console.cloud.google.com/apis/library/drive.googleapis.com?project=348083573261"
@@ -419,12 +472,41 @@ export const CloudSyncModal = ({
         {/* ACTION CARDS */}
         <div className="space-y-4">
           
-          {/* 1. Google Drive Two-Way Sync Actions */}
+          {/* OPTION 1: MAGIC SYNC LINK (RECOMMENDED - 100% RELIABLE) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-teal-950/30 border border-teal-500/40 space-y-2.5 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-extrabold text-teal-300">
+                <Sparkles className="w-4 h-4 text-teal-400" />
+                <span>Link Mở Nhanh Đa Thiết Bị (Khuyên Dùng)</span>
+              </span>
+              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
+                100% Mượt Mà
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Bấm sao chép link và gửi qua Zalo/Tin nhắn để mở trên Điện thoại hoặc Máy tính khác — toàn bộ danh mục sẽ hiển thị ngay lập tức mà <strong>không lo lỗi Google 403</strong>.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleCopyMagicLink}
+              className={`w-full py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                copiedLink 
+                  ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-emerald-500/25' 
+                  : 'bg-teal-600 hover:bg-teal-500 border-teal-400 text-slate-950 font-black shadow-teal-500/20'
+              }`}
+            >
+              {copiedLink ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedLink ? '✓ Đã Sao Chép Link! Mở Trên Máy Khác Ngay' : '🔗 Sao Chép Link Danh Mục'}</span>
+            </button>
+          </div>
+
+          {/* OPTION 2: GOOGLE DRIVE TWO-WAY SYNC */}
           <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
             <div className="text-xs font-extrabold text-white flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Cloud className="w-4 h-4 text-emerald-400" />
-                <span>Thao Tác Đồng Bộ Google Drive</span>
+                <span>Đồng Bộ Trực Tiếp Google Drive</span>
               </span>
               <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                 {data.holdings.length} mã CP hiện tại
@@ -437,7 +519,7 @@ export const CloudSyncModal = ({
                 type="button"
                 disabled={pulling || pushing}
                 onClick={() => handlePullFromDrive()}
-                className="py-3 px-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-indigo-500 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 group shadow-sm cursor-pointer"
+                className="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-indigo-500 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 group shadow-sm cursor-pointer"
               >
                 <DownloadCloud className={`w-4 h-4 text-indigo-400 group-hover:-translate-y-0.5 transition-transform ${pulling ? 'animate-bounce' : ''}`} />
                 <span>{pulling ? 'Đang Tải...' : 'Tải Từ Drive'}</span>
@@ -448,7 +530,7 @@ export const CloudSyncModal = ({
                 type="button"
                 disabled={pulling || pushing}
                 onClick={() => handlePushToDrive()}
-                className="py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 active:scale-95 group cursor-pointer"
+                className="py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 active:scale-95 group cursor-pointer"
               >
                 <UploadCloud className={`w-4 h-4 group-hover:-translate-y-0.5 transition-transform ${pushing ? 'animate-bounce' : ''}`} />
                 <span>{pushing ? 'Đang Lưu...' : 'Lưu Lên Drive'}</span>
@@ -456,30 +538,25 @@ export const CloudSyncModal = ({
             </div>
           </div>
 
-          {/* 2. Magic Sync Link */}
-          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
-            <div className="text-xs font-extrabold text-white flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Share2 className="w-4 h-4 text-teal-400" />
-                <span>Link Mở Nhanh Trên Điện Thoại & Máy Khác</span>
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Sao chép link này và mở trên bất kỳ máy tính hoặc điện thoại nào — toàn bộ danh mục sẽ hiển thị ngay lập tức mà không cần đăng nhập.
-            </p>
+          {/* OPTION 3: EXPORT / IMPORT JSON */}
+          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+            <span className="text-slate-400 text-[11px]">Sao lưu tệp JSON:</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => exportPortfolioJSON(data)}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Tải File</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleCopyMagicLink}
-              className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                copiedLink 
-                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300' 
-                  : 'bg-slate-900 hover:bg-slate-850 border-teal-500/40 text-teal-300 hover:border-teal-400'
-              }`}
-            >
-              {copiedLink ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-teal-400" />}
-              <span>{copiedLink ? '✓ Đã Sao Chép Link Vào Bộ Nhớ Tạm!' : '🔗 Sao Chép Link Danh Mục'}</span>
-            </button>
+              <label className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer">
+                <Upload className="w-3.5 h-3.5 text-slate-400" />
+                <span>Nạp File</span>
+                <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+              </label>
+            </div>
           </div>
 
         </div>
