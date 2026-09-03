@@ -665,9 +665,8 @@ export const App = () => {
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/60 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>InvestPro © 2024 - Hệ Thống Quản Lý Danh Mục Đầu Tư & Phân Bổ Lô Mua Bán Dần (Tax-Lot System)</span>
-          <span className="text-slate-400">Được tối ưu cho thị trường chứng khoán Việt Nam (HOSE / HNX / UPCOM) & Toàn cầu</span>
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-center">
+          <span>InvestPro © {new Date().getFullYear()} - Hệ Thống Quản Lý Danh Mục Đầu Tư & Phân Bổ Lô Mua Bán Dần (Tax-Lot System)</span>
         </div>
       </footer>
 
